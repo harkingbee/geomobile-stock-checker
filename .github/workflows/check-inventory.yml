@@ -5,22 +5,37 @@ on:
     - cron: '*/5 * * * *'  # 5分ごとに実行 (READMEの推奨頻度)
   workflow_dispatch:  # 手動実行用
 
+permissions:
+  contents: write  # state.json をコミットするために必要
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Node.jsのセットアップ
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-          
+
       - name: 依存パッケージのインストール
         run: npm install  # npm ci から npm install に変更
-        
+
       - name: 在庫チェックの実行
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           PRODUCT_URLS: ${{ secrets.PRODUCT_URLS }}
         run: node check_inventory_action.js
+
+      - name: 在庫状態(state.json)の変化をコミット
+        run: |
+          if ! git diff --quiet -- state.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add state.json
+            git commit -m "chore: update inventory state [skip ci]"
+            git push
+          else
+            echo "state.json に変化なし。コミットをスキップします"
+          fi

@@ -1,4 +1,6 @@
 // 必要なモジュールをインポート
+const fs = require('fs');
+const path = require('path');
 const { checkInventory } = require('./inventory_checker');
 
 // 環境変数から設定を読み込み
@@ -15,6 +17,21 @@ const productUrlsString = process.env.PRODUCT_URLS || DEFAULT_PRODUCT_URLS;
 
 // 商品URLリストを解析 (カンマまたは改行で区切る)
 const productsToMonitor = productUrlsString.split(/[,\n]+/).map(url => url.trim()).filter(url => url);
+
+// 前回の在庫状態を保存するファイル (in_stock / out_of_stock を記録し、差分検知に使う)
+const STATE_FILE = path.join(__dirname, 'state.json');
+
+function loadState() {
+  try {
+    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function saveState(state) {
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + '\n');
+}
 
 // Discord Webhookで在庫あり通知を送信する関数
 async function sendNotification(product) {
@@ -62,6 +79,9 @@ async function run() {
   console.log(`🔍 在庫チェック開始: ${new Date().toLocaleString('ja-JP')}`);
   console.log(`📋 チェック対象商品数: ${productsToMonitor.length}`);
 
+  const state = loadState();
+  let stateChanged = false;
+
   for (const url of productsToMonitor) {
     try {
       console.log(`⏳ 確認中: ${url}`);
@@ -74,10 +94,22 @@ async function run() {
 
       console.log(`📊 ${result.productName}: ${result.status}`);
 
-      // 在庫がある場合に通知
-      if (result.inStock) {
-        console.log(`🎉 在庫あり検出: ${result.productName}`);
+      const currentStatus = result.inStock ? 'in_stock' : 'out_of_stock';
+      const previousStatus = state[url];
+
+      // 「在庫切れ→在庫あり」に変わった時だけ通知（初回記録時は通知しない）
+      if (currentStatus === 'in_stock' && previousStatus === 'out_of_stock') {
+        console.log(`🎉 在庫切れ→在庫あり に変化: ${result.productName}`);
         await sendNotification(result);
+      } else if (currentStatus === 'in_stock' && previousStatus === undefined) {
+        console.log(`ℹ️ 初回記録 (在庫あり、通知はスキップ): ${result.productName}`);
+      } else {
+        console.log(`↔️ 状態変化なし (${previousStatus ?? '未記録'} → ${currentStatus}): ${result.productName}`);
+      }
+
+      if (state[url] !== currentStatus) {
+        state[url] = currentStatus;
+        stateChanged = true;
       }
     } catch (error) {
       console.error(`❌ 予期せぬエラー (${url}):`, error);
@@ -85,6 +117,11 @@ async function run() {
 
     // サーバー負荷軽減のための待機
     await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+
+  if (stateChanged) {
+    saveState(state);
+    console.log('💾 state.json を更新しました');
   }
 
   console.log(`✅ 在庫チェック完了: ${new Date().toLocaleString('ja-JP')}`);
