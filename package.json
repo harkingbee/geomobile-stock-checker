@@ -12,8 +12,5 @@
   ],
   "author": "",
   "license": "ISC",
-  "dependencies": {
-    "nodemailer": "^6.9.5",
-    "node-fetch": "^2.6.12"
-  }
+  "dependencies": {}
 }

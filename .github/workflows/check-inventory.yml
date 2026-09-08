@@ -2,11 +2,8 @@ name: 在庫チェック
 
 on:
   schedule:
-    - cron: '*/1 * * * *'  # 1分ごとに実行
+    - cron: '*/5 * * * *'  # 5分ごとに実行 (READMEの推奨頻度)
   workflow_dispatch:  # 手動実行用
-  push:               # 追加: リポジトリへのプッシュでも実行されるように
-    branches:
-      - main          # mainブランチへのプッシュ時
 
 jobs:
   check:
@@ -24,8 +21,6 @@ jobs:
         
       - name: 在庫チェックの実行
         env:
-          EMAIL_USER: ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           PRODUCT_URLS: ${{ secrets.PRODUCT_URLS }}
         run: node check_inventory_action.js
